@@ -23,6 +23,8 @@ export function createPigeon(state) {
   head.castShadow = true;
   state.player.add(head);
   state.pigeonHead = head;
+  state.headBasePos = state.pigeonHead.position.clone();
+  state.headBaseRotX = state.pigeonHead.rotation.x;
 
   const bodyFeatherMat = new THREE.MeshPhongMaterial({ color: 0x8f8f8f });
   const bodyFeatherGeo = new THREE.ConeGeometry(0.1, 0.38, 5, 1);
@@ -349,9 +351,26 @@ export function updatePlayer(state, delta, onFootstep, onEat, onScoreChange) {
     const walk = state.clock.getElapsedTime() * 14;
     state.legs[0].rotation.x = Math.sin(walk) * 1.1 + 0.6;
     state.legs[1].rotation.x = Math.sin(walk + Math.PI) * 1.1 + 0.6;
+
+    const scaleSafe = Math.max(state.player.scale.x, 0.001);
+    const headBobForward = Math.sin(walk + Math.PI) * (0.075 / scaleSafe);
+    const headBobUp = Math.sin(walk + Math.PI * 0.5) * (0.03 / scaleSafe);
+    state.pigeonHead.position.x = THREE.MathUtils.lerp(state.pigeonHead.position.x, state.headBasePos.x, 0.22);
+    state.pigeonHead.position.y = THREE.MathUtils.lerp(state.pigeonHead.position.y, state.headBasePos.y + headBobUp, 0.28);
+    state.pigeonHead.position.z = THREE.MathUtils.lerp(state.pigeonHead.position.z, state.headBasePos.z + headBobForward, 0.28);
+
+    const headNod = Math.sin(walk + Math.PI) * 0.085;
+    state.pigeonHead.rotation.x = THREE.MathUtils.lerp(state.pigeonHead.rotation.x, state.headBaseRotX + headNod, 0.25);
   } else {
     state.legs[0].rotation.x = 0.6;
     state.legs[1].rotation.x = 0.6;
+
+    state.pigeonHead.position.lerp(state.headBasePos, Math.min(1, delta * 8));
+    state.pigeonHead.rotation.x = THREE.MathUtils.lerp(
+      state.pigeonHead.rotation.x,
+      state.headBaseRotX,
+      Math.min(1, delta * 8)
+    );
   }
 
   const currentTime = state.clock.getElapsedTime();
