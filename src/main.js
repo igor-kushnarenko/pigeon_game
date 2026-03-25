@@ -249,10 +249,15 @@ function restartGame() {
 
   state.worldRoot = null;
   state.worldGroups = null;
+  state.wingRig = [];
   state.wings = [];
   state.wingPoseBlend = 0;
   state.legs = [];
   state.tailFeathers = [];
+  state.bodyFeathers = [];
+  state.neckFeathers = [];
+  state.headBasePos = new THREE.Vector3();
+  state.headBaseRotX = 0;
   state.buildingBoxes = [];
   state.cameraObstacles = [];
 

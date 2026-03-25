@@ -3,7 +3,8 @@ import { CONSTANTS } from './state.js';
 
 export function createPigeon(state) {
   state.player = new THREE.Group();
-  state.wings = [];
+  state.wingRig = [];
+  state.wings = state.wingRig;
   state.wingPoseBlend = 0;
   state.legs = [];
   state.tailFeathers = [];
@@ -170,7 +171,7 @@ export function createPigeon(state) {
       feathers.push(feather);
     }
 
-    state.wings.push({
+    state.wingRig.push({
       root: wingRoot,
       forearm: forearmPivot,
       feathers,
@@ -295,7 +296,7 @@ export function updatePlayer(state, delta, onFootstep, onEat, onScoreChange) {
   state.wingPoseBlend = THREE.MathUtils.lerp(state.wingPoseBlend, targetWingPoseBlend, Math.min(1, delta * 6));
 
   const wingRotLerp = Math.min(1, delta * 12);
-  state.wings.forEach((wing) => {
+  state.wingRig.forEach((wing) => {
     const wingSide = wing.side;
     const openPose = state.wingPoseBlend;
     const microAmp = 0.92 + (wing.flapAmplitudeScale - 0.9);
