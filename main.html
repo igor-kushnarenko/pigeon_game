@@ -72,6 +72,7 @@ let timeLeft = 600;
 let slowDownEndTime = 0;     // время окончания эффекта замедления
 let poisonEndTime = 0;       // время окончания эффекта отравления
 let startTime = 0;
+let timerId = null;
 
 // Управление
 let keys = {};
@@ -957,7 +958,11 @@ function updateUI() {
 }
 
 function startTimer() {
-  setInterval(() => {
+  if (timerId !== null) {
+    clearInterval(timerId);
+  }
+
+  timerId = setInterval(() => {
     if (!gameRunning) return;
     timeLeft--;
     updateUI();
@@ -966,6 +971,11 @@ function startTimer() {
 }
 
 function endGame() {
+  if (timerId !== null) {
+    clearInterval(timerId);
+    timerId = null;
+  }
+
   gameRunning = false;
   document.exitPointerLock();
   document.getElementById('finalScore').textContent = score;
