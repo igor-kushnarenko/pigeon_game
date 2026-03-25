@@ -61,6 +61,7 @@ let isOrbiting = false;
 
 // Семена
 let seeds = [];
+let seedMaterial = null;
 let worldRoot = null;
 let worldGroups = null;
 
@@ -643,12 +644,14 @@ function createSeeds() {
   const numTsar = Math.floor(Math.random() * 5) + 3;
   const numToxic = Math.floor(Math.random() * 6) + 3;
 
-  const seedMat = new THREE.MeshPhongMaterial({color: 0xffee33});
+  if (!seedMaterial) {
+    seedMaterial = new THREE.MeshPhongMaterial({color: 0xffee33});
+  }
 
   function createSeedMesh(type) {
     let size = 0.48;
     if (type === 'tsar') size *= 3;
-    return new THREE.Mesh(new THREE.IcosahedronGeometry(size, 1), seedMat);
+    return new THREE.Mesh(new THREE.IcosahedronGeometry(size, 1), seedMaterial);
   }
 
   function placeSeed(s, type) {
@@ -939,6 +942,11 @@ function collectSeeds() {
     if (!s.userData.collected && player.position.distanceTo(s.position) < 4.5) {
       s.userData.collected = true;
       scene.remove(s);
+      if (s.geometry) s.geometry.dispose();
+      if (s.material && s.material !== seedMaterial) {
+        const materials = Array.isArray(s.material) ? s.material : [s.material];
+        materials.forEach(mat => mat.dispose());
+      }
       seeds.splice(i, 1);
       playEatSound();
 
@@ -1055,6 +1063,7 @@ function endGame() {
   }
 
   gameRunning = false;
+  disposeAllRemainingSeeds();
   document.exitPointerLock();
   document.getElementById('finalScore').textContent = score;
   document.getElementById('gameOver').style.display = 'block';
@@ -1095,10 +1104,22 @@ function disposeObjectTree(root) {
   disposeNode(root);
 }
 
+function disposeAllRemainingSeeds() {
+  for (let i = seeds.length - 1; i >= 0; i--) {
+    const seed = seeds[i];
+    scene.remove(seed);
+    if (seed.geometry) seed.geometry.dispose();
+    if (seed.material && seed.material !== seedMaterial) {
+      const materials = Array.isArray(seed.material) ? seed.material : [seed.material];
+      materials.forEach(mat => mat.dispose());
+    }
+  }
+  seeds = [];
+}
+
 function restartGame() {
   // Очистка семян
-  seeds.forEach(seed => disposeObjectTree(seed));
-  seeds = [];
+  disposeAllRemainingSeeds();
 
   // Очистка игрока и мира
   disposeObjectTree(player);
