@@ -68,6 +68,18 @@ let worldGroups = null;
 let buildingBoxes = [];      // боксы зданий для коллизий
 let cameraObstacles = [];    // объекты, от которых камера может отталкиваться
 
+// Переиспользуемые временные объекты (снижаем GC в hot path)
+const tmpVecForward = new THREE.Vector3();
+const tmpVecRight = new THREE.Vector3();
+const tmpMoveDir = new THREE.Vector3();
+const tmpNewPos = new THREE.Vector3();
+const tmpAxisPos = new THREE.Vector3();
+const tmpPlayerXZ = new THREE.Vector3();
+const tmpCollisionSize = new THREE.Vector3();
+const tmpPlayerXZSize = new THREE.Vector3();
+const tmpBox = new THREE.Box3();
+const tmpPlayerXZBox = new THREE.Box3();
+
 // Игровые данные
 let score = 0;
 let timeLeft = 600;
@@ -743,11 +755,9 @@ function onMouseMove(e) {
 }
 
 function hasCollision(pos) {
-  const test = new THREE.Box3().setFromCenterAndSize(
-    pos,
-    new THREE.Vector3(5 * player.scale.x, 6 * player.scale.y, 6 * player.scale.z)
-  );
-  return buildingBoxes.some(b => test.intersectsBox(b));
+  tmpCollisionSize.set(5 * player.scale.x, 6 * player.scale.y, 6 * player.scale.z);
+  tmpBox.setFromCenterAndSize(pos, tmpCollisionSize);
+  return buildingBoxes.some(b => tmpBox.intersectsBox(b));
 }
 
 /**
@@ -764,12 +774,12 @@ function update(delta) {
   player.rotation.y = THREE.MathUtils.lerp(player.rotation.y, targetYaw, BODY_TURN_LERP);
 
   // Движение
-  const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(player.quaternion);
+  const forward = tmpVecForward.set(0, 0, 1).applyQuaternion(player.quaternion);
   forward.y = 0; forward.normalize();
-  const right = new THREE.Vector3(1, 0, 0).applyQuaternion(player.quaternion);
+  const right = tmpVecRight.set(1, 0, 0).applyQuaternion(player.quaternion);
   right.y = 0; right.normalize();
 
-  const moveDir = new THREE.Vector3();
+  const moveDir = tmpMoveDir.set(0, 0, 0);
   if (keys['KeyW']) moveDir.add(forward);
   if (keys['KeyS']) moveDir.sub(forward);
   if (keys['KeyA']) moveDir.add(right);
@@ -788,14 +798,16 @@ function update(delta) {
   }
 
   // Применение движения с коллизиями
-  const newPos = player.position.clone().addScaledVector(moveVelocity, delta);
+  const newPos = tmpNewPos.copy(player.position).addScaledVector(moveVelocity, delta);
   if (!hasCollision(newPos)) {
     player.position.x = newPos.x;
     player.position.z = newPos.z;
   } else {
-    const nx = player.position.clone(); nx.x += moveVelocity.x * delta;
+    const nx = tmpAxisPos.copy(player.position);
+    nx.x += moveVelocity.x * delta;
     if (!hasCollision(nx)) player.position.x = nx.x;
-    const nz = player.position.clone(); nz.z += moveVelocity.z * delta;
+    const nz = tmpAxisPos.copy(player.position);
+    nz.z += moveVelocity.z * delta;
     if (!hasCollision(nz)) player.position.z = nz.z;
   }
 
@@ -819,10 +831,9 @@ function update(delta) {
     if (velocityY < 0) {
       let maxRoof = 0;
       buildingBoxes.forEach(b => {
-        const playerXZ = new THREE.Box3().setFromCenterAndSize(
-          new THREE.Vector3(player.position.x, 0, player.position.z),
-          new THREE.Vector3(5 * player.scale.x, 1000, 6 * player.scale.z)
-        );
+        tmpPlayerXZ.set(player.position.x, 0, player.position.z);
+        tmpPlayerXZSize.set(5 * player.scale.x, 1000, 6 * player.scale.z);
+        const playerXZ = tmpPlayerXZBox.setFromCenterAndSize(tmpPlayerXZ, tmpPlayerXZSize);
         if (playerXZ.intersectsBox(b)) maxRoof = Math.max(maxRoof, b.max.y);
       });
       player.position.y = maxRoof + BASE_PIGEON_HEIGHT * player.scale.y;
