@@ -7,6 +7,8 @@ export function createPigeon(state) {
   state.wingPoseBlend = 0;
   state.legs = [];
   state.tailFeathers = [];
+  state.bodyFeathers = [];
+  state.neckFeathers = [];
 
   const bodyMat = new THREE.MeshPhongMaterial({ color: 0xaaaaaa });
   const body = new THREE.Mesh(new THREE.SphereGeometry(1.5, 24, 24), bodyMat);
@@ -21,6 +23,83 @@ export function createPigeon(state) {
   head.castShadow = true;
   state.player.add(head);
   state.pigeonHead = head;
+
+  const bodyFeatherMat = new THREE.MeshPhongMaterial({ color: 0x8f8f8f });
+  const bodyFeatherGeo = new THREE.ConeGeometry(0.1, 0.38, 5, 1);
+  const bodyRings = 5;
+  const bodyBaseCount = 14;
+  const bodyRadiusX = 2.35;
+  const bodyRadiusY = 1.55;
+  const bodyRadiusZ = 3.1;
+  const upAxis = new THREE.Vector3(0, 1, 0);
+  for (let ring = 0; ring < bodyRings; ring++) {
+    const ringT = ring / (bodyRings - 1);
+    const yNorm = -0.72 + ringT * 1.44;
+    const y = yNorm * bodyRadiusY;
+    const perRing = bodyBaseCount + Math.round((1 - Math.abs(yNorm)) * 6);
+    for (let i = 0; i < perRing; i++) {
+      const angle = (i / perRing) * Math.PI * 2 + (Math.random() - 0.5) * 0.12;
+      const feather = new THREE.Mesh(bodyFeatherGeo, bodyFeatherMat);
+      feather.castShadow = true;
+
+      feather.position.set(
+        Math.cos(angle) * (bodyRadiusX + (Math.random() - 0.5) * 0.12),
+        y + (Math.random() - 0.5) * 0.1,
+        Math.sin(angle) * (bodyRadiusZ + (Math.random() - 0.5) * 0.14)
+      );
+
+      const normal = new THREE.Vector3(
+        feather.position.x / (bodyRadiusX * bodyRadiusX),
+        feather.position.y / (bodyRadiusY * bodyRadiusY),
+        feather.position.z / (bodyRadiusZ * bodyRadiusZ)
+      ).normalize();
+      feather.quaternion.setFromUnitVectors(upAxis, normal);
+      feather.rotateZ((Math.random() - 0.5) * 0.3);
+
+      feather.userData.baseRotX = feather.rotation.x;
+      feather.userData.baseRotY = feather.rotation.y;
+      feather.userData.baseRotZ = feather.rotation.z;
+      feather.userData.flutterPhase = Math.random() * Math.PI * 2;
+      feather.userData.flutterSpeed = 7 + Math.random() * 4;
+
+      state.player.add(feather);
+      state.bodyFeathers.push(feather);
+    }
+  }
+
+  const neckFeatherMat = new THREE.MeshPhongMaterial({
+    color: 0x4f5f6b,
+    specular: 0x7fa2c0,
+    shininess: 40
+  });
+  const neckFeatherGeo = new THREE.ConeGeometry(0.08, 0.34, 6, 1);
+  const neckCenter = new THREE.Vector3(0, 1.15, 1.72);
+  const neckRadiusX = 0.8;
+  const neckRadiusZ = 0.62;
+  const neckCount = 16;
+  for (let i = 0; i < neckCount; i++) {
+    const angle = (i / neckCount) * Math.PI * 2 + (Math.random() - 0.5) * 0.15;
+    const feather = new THREE.Mesh(neckFeatherGeo, neckFeatherMat);
+    feather.castShadow = true;
+    feather.position.set(
+      neckCenter.x + Math.cos(angle) * (neckRadiusX + (Math.random() - 0.5) * 0.06),
+      neckCenter.y + (Math.random() - 0.5) * 0.05,
+      neckCenter.z + Math.sin(angle) * (neckRadiusZ + (Math.random() - 0.5) * 0.06)
+    );
+
+    const neckNormal = new THREE.Vector3(Math.cos(angle), 0.35, Math.sin(angle) * 1.2).normalize();
+    feather.quaternion.setFromUnitVectors(upAxis, neckNormal);
+    feather.rotateZ((Math.random() - 0.5) * 0.22);
+
+    feather.userData.baseRotX = feather.rotation.x;
+    feather.userData.baseRotY = feather.rotation.y;
+    feather.userData.baseRotZ = feather.rotation.z;
+    feather.userData.flutterPhase = Math.random() * Math.PI * 2;
+    feather.userData.flutterSpeed = 9 + Math.random() * 4;
+
+    state.player.add(feather);
+    state.neckFeathers.push(feather);
+  }
 
   const beak = new THREE.Mesh(new THREE.ConeGeometry(0.3, 1.3, 4), new THREE.MeshPhongMaterial({ color: 0xffaa22 }));
   beak.rotation.x = Math.PI / 2;
@@ -286,6 +365,26 @@ export function updatePlayer(state, delta, onFootstep, onEat, onScoreChange) {
   const tailWalk = (!state.isFlying && moveDir.lengthSq() > 0) ? Math.sin(state.clock.getElapsedTime() * 22) * 0.22 : 0;
   state.tailFeathers.forEach((f, i) => {
     f.rotation.z = tailFlap + tailWalk * ((i % 2) ? -1 : 1) * 0.7;
+  });
+
+  const moveIntensity = THREE.MathUtils.clamp(state.moveVelocity.length() / 12, 0, 1);
+  const flapIntensity = state.isFlying ? (0.55 + 0.45 * Math.abs(Math.sin(elapsed * 14))) : 0;
+  const featherOscillation = 0.008 + moveIntensity * 0.016 + flapIntensity * 0.018;
+  const neckOscillation = featherOscillation * 1.15;
+  const neckLift = state.isFlying ? Math.sin(elapsed * 18) * 0.01 : 0;
+
+  state.bodyFeathers.forEach((feather) => {
+    const flutter = Math.sin(elapsed * feather.userData.flutterSpeed + feather.userData.flutterPhase);
+    feather.rotation.x = feather.userData.baseRotX + flutter * featherOscillation;
+    feather.rotation.y = feather.userData.baseRotY + flutter * featherOscillation * 0.6;
+    feather.rotation.z = feather.userData.baseRotZ + flutter * featherOscillation * 0.8;
+  });
+
+  state.neckFeathers.forEach((feather) => {
+    const flutter = Math.sin(elapsed * feather.userData.flutterSpeed + feather.userData.flutterPhase);
+    feather.rotation.x = feather.userData.baseRotX + flutter * neckOscillation + neckLift;
+    feather.rotation.y = feather.userData.baseRotY + flutter * neckOscillation * 0.7;
+    feather.rotation.z = feather.userData.baseRotZ + flutter * neckOscillation * 0.9;
   });
 
   state.seeds.forEach((s) => {
