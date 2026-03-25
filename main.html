@@ -635,6 +635,9 @@ function createPigeon() {
  */
 function createSeeds() {
   seeds = [];
+  const spawnMinDistance = 8.5;
+  const gridCellSize = 10;
+  const seedSpatialIndex = new Map();
 
   const totalRegular = Math.floor(Math.random() * 301) + 650;
   const numTsar = Math.floor(Math.random() * 5) + 3;
@@ -663,7 +666,7 @@ function createSeeds() {
         z = Math.sin(angle) * dist;
       }
       attempts++;
-    } while (isTooCloseToOtherSeeds(x, z) && attempts < 40);
+    } while (isTooCloseToOtherSeeds(x, z, seedSpatialIndex, gridCellSize, spawnMinDistance) && attempts < 40);
 
     // Иногда на крышах
     if (Math.random() < 0.28 && buildingBoxes.length) {
@@ -677,6 +680,7 @@ function createSeeds() {
     s.userData = { collected: false, initialY: y, type: type };
     scene.add(s);
     seeds.push(s);
+    addSeedToSpatialIndex(s, seedSpatialIndex, gridCellSize);
   }
 
   for (let i = 0; i < totalRegular; i++) placeSeed(createSeedMesh('regular'), 'regular');
@@ -685,9 +689,31 @@ function createSeeds() {
 }
 
 
-function isTooCloseToOtherSeeds(x, z) {
-  for (let s of seeds) {
-    if (Math.hypot(s.position.x - x, s.position.z - z) < 8.5) return true;
+function getSeedCellKey(x, z, cellSize) {
+  const cellX = Math.floor(x / cellSize);
+  const cellZ = Math.floor(z / cellSize);
+  return `${cellX},${cellZ}`;
+}
+
+function addSeedToSpatialIndex(seed, spatialIndex, cellSize) {
+  const key = getSeedCellKey(seed.position.x, seed.position.z, cellSize);
+  if (!spatialIndex.has(key)) spatialIndex.set(key, []);
+  spatialIndex.get(key).push(seed);
+}
+
+function isTooCloseToOtherSeeds(x, z, spatialIndex, cellSize, minDistance) {
+  const baseCellX = Math.floor(x / cellSize);
+  const baseCellZ = Math.floor(z / cellSize);
+
+  for (let dx = -1; dx <= 1; dx++) {
+    for (let dz = -1; dz <= 1; dz++) {
+      const neighborKey = `${baseCellX + dx},${baseCellZ + dz}`;
+      const neighborSeeds = spatialIndex.get(neighborKey);
+      if (!neighborSeeds) continue;
+      for (let s of neighborSeeds) {
+        if (Math.hypot(s.position.x - x, s.position.z - z) < minDistance) return true;
+      }
+    }
   }
   return false;
 }
