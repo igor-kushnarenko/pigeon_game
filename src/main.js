@@ -250,6 +250,7 @@ function restartGame() {
   state.worldRoot = null;
   state.worldGroups = null;
   state.wings = [];
+  state.wingPoseBlend = 0;
   state.legs = [];
   state.tailFeathers = [];
   state.buildingBoxes = [];

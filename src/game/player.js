@@ -4,6 +4,7 @@ import { CONSTANTS } from './state.js';
 export function createPigeon(state) {
   state.player = new THREE.Group();
   state.wings = [];
+  state.wingPoseBlend = 0;
   state.legs = [];
   state.tailFeathers = [];
 
@@ -54,19 +55,53 @@ export function createPigeon(state) {
   state.player.add(rightLeg);
   state.legs.push(rightLeg);
 
-  const wingMat = new THREE.MeshPhongMaterial({ color: 0x777777, side: THREE.DoubleSide });
-  const leftWing = new THREE.Mesh(new THREE.PlaneGeometry(4.6, 3.1), wingMat);
-  leftWing.position.set(-2.2, 0.8, 0.4);
-  leftWing.rotation.y = Math.PI / 2;
-  leftWing.castShadow = true;
-  state.player.add(leftWing);
-  state.wings.push(leftWing);
+  const wingMat = new THREE.MeshPhongMaterial({ color: 0x777777 });
+  const featherMat = new THREE.MeshPhongMaterial({ color: 0x5f5f5f, side: THREE.DoubleSide });
 
-  const rightWing = leftWing.clone();
-  rightWing.position.x = 2.2;
-  rightWing.rotation.y = -Math.PI / 2;
-  state.player.add(rightWing);
-  state.wings.push(rightWing);
+  const createWing = (side) => {
+    const wingRoot = new THREE.Group();
+    wingRoot.position.set(side * 1.9, 0.8, 0.45);
+    state.player.add(wingRoot);
+
+    const shoulder = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.5, 0.75), wingMat);
+    shoulder.position.set(side * 0.65, 0.05, 0.08);
+    shoulder.castShadow = true;
+    wingRoot.add(shoulder);
+
+    const forearmPivot = new THREE.Group();
+    forearmPivot.position.set(side * 1.2, -0.05, -0.03);
+    wingRoot.add(forearmPivot);
+
+    const forearm = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.3, 0.48), wingMat);
+    forearm.position.set(side * 0.78, -0.04, -0.1);
+    forearm.castShadow = true;
+    forearmPivot.add(forearm);
+
+    const feathers = [];
+    for (let i = 0; i < 5; i++) {
+      const feather = new THREE.Mesh(new THREE.PlaneGeometry(1.35 + i * 0.12, 0.28), featherMat);
+      feather.position.set(side * (1 + i * 0.23), -0.12 - i * 0.03, -0.3 - i * 0.18);
+      feather.rotation.x = 0.1 + i * 0.05;
+      feather.rotation.y = side > 0 ? Math.PI : 0;
+      feather.rotation.z = side * (0.08 + i * 0.09);
+      feather.castShadow = true;
+      forearmPivot.add(feather);
+      feathers.push(feather);
+    }
+
+    state.wings.push({
+      root: wingRoot,
+      forearm: forearmPivot,
+      feathers,
+      side,
+      flapPhaseOffset: (Math.random() - 0.5) * 0.7,
+      flapAmplitudeScale: 0.9 + Math.random() * 0.2,
+      microPhase: Math.random() * Math.PI * 2
+    });
+  };
+
+  createWing(-1);
+  createWing(1);
 
   const tailMat = new THREE.MeshPhongMaterial({ color: 0x555555, side: THREE.DoubleSide });
   for (let i = -2; i <= 2; i++) {
@@ -127,6 +162,7 @@ function collectSeeds(state, onEat, onScoreChange) {
 
 export function updatePlayer(state, delta, onFootstep, onEat, onScoreChange) {
   state.isFlying = state.keys.Space;
+  state.wingPoseBlend = state.wingPoseBlend ?? 0;
   handlePoisonEffect(state);
 
   state.player.rotation.y = THREE.MathUtils.lerp(state.player.rotation.y, state.targetYaw, CONSTANTS.BODY_TURN_LERP);
@@ -169,14 +205,42 @@ export function updatePlayer(state, delta, onFootstep, onEat, onScoreChange) {
 
   if (state.isFlying) {
     state.velocityY = CONSTANTS.FLY_FORCE;
-    const flap = Math.sin(state.clock.getElapsedTime() * 15) * 0.85;
-    state.wings[0].rotation.z = flap;
-    state.wings[1].rotation.z = -flap;
   } else {
     state.velocityY -= CONSTANTS.GRAVITY * delta;
-    state.wings[0].rotation.z = 0.4;
-    state.wings[1].rotation.z = -0.4;
   }
+
+  const elapsed = state.clock.getElapsedTime();
+  const targetWingPoseBlend = state.isFlying ? 1 : 0;
+  state.wingPoseBlend = THREE.MathUtils.lerp(state.wingPoseBlend, targetWingPoseBlend, Math.min(1, delta * 6));
+
+  const wingRotLerp = Math.min(1, delta * 12);
+  state.wings.forEach((wing) => {
+    const wingSide = wing.side;
+    const openPose = state.wingPoseBlend;
+    const microAmp = 0.92 + (wing.flapAmplitudeScale - 0.9);
+    const flapPhase = elapsed * 14 * microAmp + wing.flapPhaseOffset;
+    const flightFlap = Math.sin(flapPhase) * 0.92 * openPose * wing.flapAmplitudeScale;
+    const microMovement = Math.sin(elapsed * 9 + wing.microPhase) * 0.05 * (0.9 + openPose * 0.5);
+
+    const targetRootY = -wingSide * (1.15 + openPose * 1.08);
+    const targetRootX = 0.2 + THREE.MathUtils.lerp(0, -0.45 + flightFlap, openPose) + microMovement * 0.25;
+    const targetRootZ = wingSide * THREE.MathUtils.lerp(0.45, 0.1, openPose);
+
+    wing.root.rotation.x = THREE.MathUtils.lerp(wing.root.rotation.x, targetRootX, wingRotLerp);
+    wing.root.rotation.y = THREE.MathUtils.lerp(wing.root.rotation.y, targetRootY, wingRotLerp);
+    wing.root.rotation.z = THREE.MathUtils.lerp(wing.root.rotation.z, targetRootZ, wingRotLerp);
+
+    const targetForearmX = THREE.MathUtils.lerp(0.35, -0.25 + flightFlap * 0.4, openPose) + microMovement * 0.35;
+    const targetForearmZ = wingSide * THREE.MathUtils.lerp(0.42, 0.14 + flightFlap * 0.35, openPose);
+    wing.forearm.rotation.x = THREE.MathUtils.lerp(wing.forearm.rotation.x, targetForearmX, wingRotLerp);
+    wing.forearm.rotation.z = THREE.MathUtils.lerp(wing.forearm.rotation.z, targetForearmZ, wingRotLerp);
+
+    wing.feathers.forEach((feather, i) => {
+      const featherSpread = 0.08 + i * 0.09;
+      feather.rotation.z = wingSide * (featherSpread + openPose * 0.17 + flightFlap * 0.12);
+      feather.rotation.x = 0.1 + i * 0.05 + openPose * 0.06 + microMovement * 0.2;
+    });
+  });
 
   const oldY = state.player.position.y;
   state.player.position.y += state.velocityY * delta;
