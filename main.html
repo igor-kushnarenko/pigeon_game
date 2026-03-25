@@ -61,6 +61,8 @@ let isOrbiting = false;
 
 // Семена
 let seeds = [];
+let worldRoot = null;
+let worldGroups = null;
 
 // Коллизии
 let buildingBoxes = [];      // боксы зданий для коллизий
@@ -185,11 +187,7 @@ function init() {
   scene.add(ground);
 
   // Генерация мира
-  createRoads();
-  createMountains();
-  createForest();
-  createBuildings();
-  createCityVegetation();   // небольшие парки в городе
+  createWorld();
   createPigeon();
   createSeeds();
 
@@ -255,6 +253,36 @@ document.getElementById('clickToPlay').style.pointerEvents = 'auto'; // на в�
   startTimer();
 }
 
+function initWorldGroups() {
+  worldRoot = new THREE.Group();
+  worldRoot.name = 'worldRoot';
+  worldGroups = {
+    roads: new THREE.Group(),
+    mountains: new THREE.Group(),
+    forest: new THREE.Group(),
+    city: new THREE.Group(),
+    buildings: new THREE.Group()
+  };
+
+  worldGroups.roads.name = 'roads';
+  worldGroups.mountains.name = 'mountains';
+  worldGroups.forest.name = 'forest';
+  worldGroups.city.name = 'city';
+  worldGroups.buildings.name = 'buildings';
+
+  Object.values(worldGroups).forEach(group => worldRoot.add(group));
+  scene.add(worldRoot);
+}
+
+function createWorld() {
+  initWorldGroups();
+  createRoads();
+  createMountains();
+  createForest();
+  createBuildings();
+  createCityVegetation();
+}
+
 // =============== ГЕНЕРАЦИЯ МИРА ===============
 
 /**
@@ -269,7 +297,7 @@ function createRoads() {
     road.rotation.x = -Math.PI/2;
     road.position.set(x, 0.2, 0);
     road.receiveShadow = true;
-    scene.add(road);
+    worldGroups.roads.add(road);
   }
 
   // Вертикальные дороги
@@ -278,7 +306,7 @@ function createRoads() {
     road.rotation.x = -Math.PI/2;
     road.position.set(0, 0.2, z);
     road.receiveShadow = true;
-    scene.add(road);
+    worldGroups.roads.add(road);
   }
 }
 
@@ -317,7 +345,7 @@ function createMountains() {
     mountain.rotation.y = Math.random() * Math.PI * 2;
     mountain.castShadow = true;
     mountain.receiveShadow = true;
-    scene.add(mountain);
+    worldGroups.mountains.add(mountain);
   }
 }
 
@@ -374,8 +402,19 @@ function createCityVegetation() {
     const x = (Math.random() - 0.5) * (CITY_SIZE * 1.8);
     const z = (Math.random() - 0.5) * (CITY_SIZE * 1.8);
     if (isOnRoad(x, z)) continue;
-    createBush(x, z, 0.7 + Math.random() * 0.6);
+    createCityBush(x, z, 0.7 + Math.random() * 0.6);
   }
+}
+
+function createCityBush(x, z, scale = 1) {
+  const bush = new THREE.Mesh(
+    new THREE.SphereGeometry(6.2 * scale, 7, 7),
+    new THREE.MeshLambertMaterial({color: 0x1a5c1a})
+  );
+  bush.position.set(x, 5 * scale, z);
+  bush.castShadow = false;
+  bush.receiveShadow = false;
+  worldGroups.city.add(bush);
 }
 
 /**
@@ -397,7 +436,8 @@ function createTree(x, z, scale = 1, isForest = false) {
   trunk.position.set(x, trunkHeight / 2, z);
   trunk.castShadow = false;      // ← УБРАЛИ тень
   trunk.receiveShadow = false;   // ← УБРАЛИ тень
-  scene.add(trunk);
+  const targetGroup = isForest ? worldGroups.forest : worldGroups.city;
+  targetGroup.add(trunk);
 
   const leaves = new THREE.Mesh(
     new THREE.ConeGeometry(14.5 * scale, 29 * scale, 7),
@@ -406,7 +446,7 @@ function createTree(x, z, scale = 1, isForest = false) {
   leaves.position.set(x, trunkHeight + 8 * scale, z);
   leaves.castShadow = false;     // ← УБРАЛИ тень
   leaves.receiveShadow = false;  // ← УБРАЛИ тень
-  scene.add(leaves);
+  targetGroup.add(leaves);
 }
 
 /**
@@ -420,7 +460,7 @@ function createBush(x, z, scale = 1) {
   bush.position.set(x, 5 * scale, z);
   bush.castShadow = false;       // ← УБРАЛИ тень
   bush.receiveShadow = false;    // ← УБРАЛИ тень
-  scene.add(bush);
+  worldGroups.forest.add(bush);
 }
 
 
@@ -452,7 +492,7 @@ function createNormalBuilding(x, z) {
   b.position.set(x, h/2, z);
   b.castShadow = true;
   b.receiveShadow = true;
-  scene.add(b);
+  worldGroups.buildings.add(b);
   buildingBoxes.push(new THREE.Box3().setFromObject(b));
   cameraObstacles.push(b);
 }
@@ -465,7 +505,7 @@ function createNYSkyscraper(x, z) {
   b.position.set(x, h/2, z);
   b.castShadow = true;
   b.receiveShadow = true;
-  scene.add(b);
+  worldGroups.buildings.add(b);
   buildingBoxes.push(new THREE.Box3().setFromObject(b));
   cameraObstacles.push(b);
 }
@@ -982,19 +1022,57 @@ function endGame() {
   document.getElementById('gameOver').style.display = 'block';
 }
 
+function disposeObjectTree(root) {
+  if (!root) return;
+
+  const materialRefs = new Map();
+  root.traverse(obj => {
+    if (!obj.isMesh || !obj.material) return;
+    const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
+    materials.forEach(mat => {
+      materialRefs.set(mat.uuid, (materialRefs.get(mat.uuid) || 0) + 1);
+    });
+  });
+
+  const disposeNode = (node) => {
+    for (let i = node.children.length - 1; i >= 0; i--) {
+      disposeNode(node.children[i]);
+    }
+
+    if (node.isMesh) {
+      if (node.geometry) node.geometry.dispose();
+      if (node.material) {
+        const materials = Array.isArray(node.material) ? node.material : [node.material];
+        materials.forEach(mat => {
+          if ((materialRefs.get(mat.uuid) || 0) <= 1) {
+            mat.dispose();
+          }
+        });
+      }
+    }
+
+    if (node.parent) node.parent.remove(node);
+  };
+
+  disposeNode(root);
+}
+
 function restartGame() {
-  // Очистка
-  seeds.forEach(s => scene.remove(s));
-  scene.remove(player);
+  // Очистка семян
+  seeds.forEach(seed => disposeObjectTree(seed));
+  seeds = [];
+
+  // Очистка игрока и мира
+  disposeObjectTree(player);
+  disposeObjectTree(worldRoot);
+  worldRoot = null;
+  worldGroups = null;
+
   wings = []; legs = []; tailFeathers = [];
   buildingBoxes = []; cameraObstacles = [];
 
   // Пересоздание мира
-  createRoads();
-  createMountains();
-  createForest();
-  createBuildings();
-  createCityVegetation();
+  createWorld();
   createPigeon();
   createSeeds();
 
