@@ -243,8 +243,9 @@ function startGame() {
   moveVelocity.set(0,0,0);
   player.scale.set(0.5, 0.5, 0.5);
 
-document.getElementById('clickToPlay').style.display = 'flex';
-document.getElementById('clickToPlay').style.pointerEvents = 'auto'; // на всякий случай  updateUI();
+  document.getElementById('clickToPlay').style.display = 'flex';
+  document.getElementById('clickToPlay').style.pointerEvents = 'auto'; // на всякий случай
+  updateUI();
   gameRunning = true;
   document.getElementById('gameOver').style.display = 'none';
   renderer.domElement.focus();
