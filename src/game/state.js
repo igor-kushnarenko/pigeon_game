@@ -36,6 +36,7 @@ export function createGameState() {
     raycaster: null,
     player: null,
     wings: [],
+    wingPoseBlend: 0,
     legs: [],
     tailFeathers: [],
     pigeonBody: null,
